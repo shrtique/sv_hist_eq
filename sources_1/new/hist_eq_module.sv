@@ -27,7 +27,6 @@
 
 module hist_eq_module #(
   parameter DATA_WIDTH = 8
-  //parameter PIPELINE_LENGTH = 10
 )(  
 
   input  logic                    i_sys_clk,
@@ -36,7 +35,7 @@ module hist_eq_module #(
   input  logic [DATA_WIDTH-1:0]   contrast_threshold_param,
   input  logic [9:0]              upper_bound_param,
   input  logic [9:0]              lower_bound_param,
-  input  logic                    en_module,
+  input  logic                    thresholding_en,
   
   input  logic [DATA_WIDTH-1:0]   s_axis_tdata,
   input  logic                    s_axis_tvalid,
@@ -51,7 +50,7 @@ module hist_eq_module #(
 
 );
 
-localparam PIPELINE_LENGTH = 10;
+localparam PIPELINE_LENGTH = 12;
 //
 //
 
@@ -385,10 +384,15 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
     if ( ~i_sys_aresetn ) begin
       data_after_threshold <= '{default:'0};
     end else begin
-      if ( f_I < contrast_threshold_param ) begin
-        data_after_threshold <= '{default:'1};
+      
+      if ( f_I > contrast_threshold_param ) begin
+          data_after_threshold <= '{default:'1};    
       end else begin
-        data_after_threshold <= '{default:'0};
+        if ( thresholding_en ) begin
+          data_after_threshold <= '{default:'0};
+        end else begin
+          data_after_threshold <= tdata[10];
+      	end  
       end
     end
 end
@@ -397,6 +401,7 @@ end
 
 //OUTPUT 
 // [23:16] - saturation channel, [15:8] - image mask, [7:0] - original image
+// if thresholding_en == 0, [15:8] - contrasted image
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
@@ -406,7 +411,7 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
       m_axis_tuser  <= 1'b0;
       m_axis_tlast  <= 1'b0;
     end else begin
-    	
+
       //3rd channel in m_axis_tdata shows saturated pixels	
       if ( tdata[PIPELINE_LENGTH-1] == '1 ) begin
         m_axis_tdata[3*DATA_WIDTH-1:2*DATA_WIDTH] <= '{default:'1};
