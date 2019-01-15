@@ -127,13 +127,13 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
         contrast_threshold <= '0;
         upper_bound        <= '0;
         lower_bound        <= '0;
-        en_module          <= 1'b0;
+        thresholding_en    <= 1'b0;
       end else begin
         if ( s_axis_tuser ) begin
           contrast_threshold <= slv_reg0[DATA_WIDTH-1:0];
           upper_bound        <= slv_reg0[19:10];
           lower_bound        <= slv_reg0[29:20];
-          en_module          <= slv_reg [C_S00_AXI_DATA_WIDTH-1]; 
+          thresholding_en    <= slv_reg0[C_S00_AXI_DATA_WIDTH-1]; 
         end    
       end
     end
@@ -142,12 +142,12 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
     
   //Instantiation of hist_eq_module
   hist_eq_module #(
-    .DATA_WIDTH  ( DATA_WIDTH ),
+    .DATA_WIDTH  ( DATA_WIDTH )
 
   ) hist_eq_module_inst ( 
 
-    .i_clk                    ( i_sys_clk          ),
-    .i_aresetn                ( i_sys_aresetn      ),
+    .i_sys_clk                ( i_sys_clk          ),
+    .i_sys_aresetn            ( i_sys_aresetn      ),
                                 
     .contrast_threshold_param ( contrast_threshold ),
     .upper_bound_param        ( upper_bound        ),

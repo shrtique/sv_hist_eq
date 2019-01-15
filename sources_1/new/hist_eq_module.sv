@@ -126,15 +126,18 @@ logic [DATA_WIDTH-1:0] next_min_I, min_I;
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
     if ( ~i_sys_aresetn ) begin
-      next_max_I <= '0;
+      next_max_I <= '0; // 
       next_min_I <= '1;
     end else begin
 
       if ( tvalid[0] ) begin
 
-        if ( tuser[0] ) begin //update max_I, min_I with tuser
-           max_I <= next_max_I;
-           min_I <= next_min_I;
+        if ( tuser[0] ) begin //update max_I, min_I with tuser and reset next_max_I to 0 and next_min_I to 255
+           max_I      <= next_max_I;
+           min_I      <= next_min_I;
+
+           next_max_I <= '0;
+           next_min_I <= '1;
         end else begin 
 
           if ( tdata[0] > next_max_I ) begin
