@@ -35,10 +35,10 @@ logic [9:0]            lower_bound;
 logic                  thresholding_en; 
 
 
-logic [DATA_WIDTH-1:0] s_axis_tdata;
-logic                  s_axis_tvalid;
-logic                  s_axis_tuser;
-logic                  s_axis_tlast;
+logic [DATA_WIDTH-1:0] s_axis_tdata,  s_axis_tdata_r; 
+logic                  s_axis_tvalid, s_axis_tvalid_r;
+logic                  s_axis_tuser,  s_axis_tuser_r;
+logic                  s_axis_tlast,  s_axis_tlast_r;
 
 
             
@@ -55,10 +55,10 @@ hist_eq_module #(
   .lower_bound_param        ( lower_bound        ),
   .thresholding_en          ( thresholding_en    ),
   
-  .s_axis_tdata             ( s_axis_tdata       ),
-  .s_axis_tvalid            ( s_axis_tvalid      ),
-  .s_axis_tuser             ( s_axis_tuser       ),
-  .s_axis_tlast             ( s_axis_tlast       ),
+  .s_axis_tdata             ( s_axis_tdata_r      ),
+  .s_axis_tvalid            ( s_axis_tvalid_r      ),
+  .s_axis_tuser             ( s_axis_tuser_r       ),
+  .s_axis_tlast             ( s_axis_tlast_r       ),
   .s_axis_tready            (       ),
         
   .m_axis_tdata             (        ),
@@ -80,9 +80,9 @@ initial
   begin
 
     aresetn            = 1'b0;
-    contrast_threshold = '0;
-    upper_bound        = '0;
-    lower_bound        = '0;
+    contrast_threshold = 170;
+    upper_bound        = 250;
+    lower_bound        = 100;
     thresholding_en    = '0;
 
     s_axis_tdata       = '0;
@@ -90,10 +90,37 @@ initial
     s_axis_tuser       = 1'b0;
     s_axis_tlast       = 1'b0;
 
-    #20;
+    #17;
     aresetn            = 1'b1;
 
+    @(posedge clk);
+      s_axis_tvalid = 1'b1;
+      s_axis_tuser  = 1'b1;
+    @(posedge clk);
+      s_axis_tuser  = 1'b0;
+
+    #100;
+    @(posedge clk);
+      s_axis_tuser  = 1'b1;  
+    @(posedge clk);
+      s_axis_tuser  = 1'b0;
+
   end 
+
+
+always @(posedge clk) begin
+  if (~aresetn) begin
+    s_axis_tdata_r  <= '0;
+    s_axis_tvalid_r <= '0;
+    s_axis_tuser_r  <= '0;
+    s_axis_tlast_r  <= '0;
+  end else begin
+    s_axis_tdata_r  <= s_axis_tdata_r + 1;;
+    s_axis_tvalid_r <= s_axis_tvalid;
+    s_axis_tuser_r  <= s_axis_tuser;
+    s_axis_tlast_r  <= s_axis_tlast;
+  end  
+end  
 
 
 //////////////////////////////////////////////////////////////////////////////////

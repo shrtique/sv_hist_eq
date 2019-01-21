@@ -50,7 +50,8 @@ module hist_eq_module #(
 
 );
 
-localparam PIPELINE_LENGTH = 12;
+localparam PIPELINE_LENGTH    = 10;
+localparam MAXIMUM_BRIGHTNESS = 2**DATA_WIDTH - 1;
 //
 //
 
@@ -122,22 +123,33 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
 
 logic [DATA_WIDTH-1:0] next_max_I, max_I;
 logic [DATA_WIDTH-1:0] next_min_I, min_I;
+logic                  ip_is_after_reset;
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
     if ( ~i_sys_aresetn ) begin
-      next_max_I <= '0; // 
-      next_min_I <= '1;
+      ip_is_after_reset <= 1'b1;
+
+      max_I             <= '1;
+      min_I             <= '0;
+
+      next_max_I        <= '0; 
+      next_min_I        <= '1;
     end else begin
 
       if ( tvalid[0] ) begin
 
-        if ( tuser[0] ) begin //update max_I, min_I with tuser and reset next_max_I to 0 and next_min_I to 255
-           max_I      <= next_max_I;
-           min_I      <= next_min_I;
+        if ( tuser[0] ) begin //update max_I, min_I with tuser and reset next_max_I to 0 and next_min_I to 255 //miss one pixel but we dnt mind
+        
+          if ( ~ip_is_after_reset ) begin
+            max_I      <= next_max_I;
+            min_I      <= next_min_I;
+          end
 
-           next_max_I <= '0;
-           next_min_I <= '1;
+           next_max_I        <= '0;
+           next_min_I        <= '1;
+           ip_is_after_reset <= 1'b0;
+
         end else begin 
 
           if ( tdata[0] > next_max_I ) begin
@@ -275,7 +287,7 @@ end
 //
 //
 
-//STAGE_6
+//STAGE_5
 //cut_diff_max_I_min_I = (cut_max_I - cut_min_I)
 logic [DATA_WIDTH-1:0] cut_diff_max_I_min_I;
 
@@ -290,9 +302,9 @@ end
 //
 //
 
-//STAGE_7
+//STAGE_6
 //(255)/(cut_max_I - cut_min_I) = mult;
-//We decided not to use devision, so we estimated according cut_diff_max_I_min_I
+//We decided not to use devision, so we estimated mult according to cut_diff_max_I_min_I
 logic [4:0] mult;
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
@@ -345,29 +357,36 @@ end
 //
 //
 
-//STAGE_8
+//STAGE_7
 //data_minus_min_I = (I - min_I)
+//calculation during this stage is done simultainiously with stage_6,..
+//..so mult and data_minus_min_I appear together
 
 logic [DATA_WIDTH-1:0] data_minus_min_I;
+logic test1;
+logic test2;
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
     if ( ~i_sys_aresetn ) begin
       data_minus_min_I <= '{default:'0};
     end else begin
-      if ( tdata[8] <  cut_min_I ) begin
-        data_minus_min_I <= '{default:'0};
-      end else begin	
-        data_minus_min_I <= tdata[8] - cut_min_I;
-      end
+     // if ( tdata[4] <  cut_min_I ) begin
+     //   data_minus_min_I <= '{default:'0};
+     // end else begin	
+     //   data_minus_min_I <= tdata[3] - cut_min_I;
+     // end
+     data_minus_min_I <= tdata[6];
     end
 end
 //
 //
 
-//STAGE_9
+//STAGE_8
 // f(I) = data_minus_min_I * mult;
 logic [DATA_WIDTH+4:0] f_I;
+logic test3;
+logic test4;
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
@@ -378,26 +397,35 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
     end
 end
 
-//STAGE_10
+//STAGE_9
 //Thresholding -> IMAGE MASK CREATION
 logic [DATA_WIDTH-1:0] data_after_threshold;
+logic test5;
+logic test6;
+logic test7;
+logic test8;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
-  begin 
-    if ( ~i_sys_aresetn ) begin
-      data_after_threshold <= '{default:'0};
-    end else begin
-      
+always_ff @( posedge i_sys_clk, negedge i_sys_aresetn ) begin 
+  if ( ~i_sys_aresetn ) begin
+    data_after_threshold <= '{default:'0};
+  end else begin
+
+    if ( thresholding_en ) begin
+
       if ( f_I > contrast_threshold_param ) begin
-          data_after_threshold <= '{default:'1};    
+        data_after_threshold <= '{default:'1};    
       end else begin
-        if ( thresholding_en ) begin
-          data_after_threshold <= '{default:'0};
-        end else begin
-          data_after_threshold <= tdata[10];
-      	end  
+        data_after_threshold <= '{default:'0};
+      end  
+
+    end else begin
+      if ( f_I > MAXIMUM_BRIGHTNESS ) begin
+        data_after_threshold <= '1;
+      end else begin
+        data_after_threshold <= f_I;
       end
     end
+  end     
 end
 //
 //

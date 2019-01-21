@@ -6,7 +6,7 @@
         //[9:0]   threshold    
         //[19:10] upper_bound_param
         //[29:20] lower_bound_param
-        //[31]    en_module 
+        //[31]    threshold_enable 
         
 ///////
 
