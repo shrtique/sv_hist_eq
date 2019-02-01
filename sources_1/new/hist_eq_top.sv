@@ -6,7 +6,8 @@
         //[9:0]   threshold    
         //[19:10] upper_bound_param
         //[29:20] lower_bound_param
-        //[31]    threshold_enable 
+        //[30]    threshold_enable 
+        //[31]    set_new_param
         
 ///////
 
@@ -117,8 +118,19 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
     logic [9:0]            upper_bound;
     logic [9:0]            lower_bound;
     logic                  thresholding_en;
+    logic [0:1]  set_new_param; 
     //
     //
+
+    // synch stage   
+    always_ff @( posedge i_sys_clk, negedge i_sys_aresetn ) begin 
+      if ( ~i_sys_aresetn ) begin
+        set_new_param <= '0;
+      end else begin
+        set_new_param <= {slv_reg0[31],set_new_param[0]};
+      end
+    end
+    ////
 
 	//registering new parameters only when s_axis_tuser is active
 	always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
@@ -129,11 +141,11 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
         lower_bound        <= '0;
         thresholding_en    <= 1'b0;
       end else begin
-        if ( s_axis_tuser ) begin
+        if ( s_axis_tuser && set_new_param[1] ) begin
           contrast_threshold <= slv_reg0[DATA_WIDTH-1:0];
           upper_bound        <= slv_reg0[19:10];
           lower_bound        <= slv_reg0[29:20];
-          thresholding_en    <= slv_reg0[C_S00_AXI_DATA_WIDTH-1]; 
+          thresholding_en    <= slv_reg0[30]; 
         end    
       end
     end
