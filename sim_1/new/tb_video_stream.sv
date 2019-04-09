@@ -90,7 +90,7 @@ integer fileId;
 initial
   begin
     // Read
-    fileId = $fopen("img_1280_1024_2.bin", "rb");
+    fileId = $fopen("img_1280_1024_3.bin", "rb");
     $fread(loaded_image, fileId);
     $fclose(fileId);
 

@@ -394,6 +394,7 @@
 	end    
 
 	// Add user logic here
+	/*
     always_ff @( posedge S_AXI_ACLK )
     begin
 
@@ -411,7 +412,11 @@
 
        end  
     end;
-
+    */
+    assign slv_reg0_out = slv_reg0;
+    assign slv_reg1_out = slv_reg1;
+    assign slv_reg2_out = slv_reg2;
+    assign slv_reg3_out = slv_reg3;
 	// User logic ends
 
 endmodule

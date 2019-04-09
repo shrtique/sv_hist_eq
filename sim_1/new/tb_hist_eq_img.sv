@@ -39,7 +39,7 @@ tb_video_stream #(
 //
 
 //signals
-logic [3*DATA_WIDTH-1:0] tdata_eq;
+logic [2*DATA_WIDTH-1:0] tdata_eq;
 logic                  tvalid_eq;
 logic                  tuser_eq;
 logic                  tlast_eq; 

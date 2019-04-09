@@ -43,14 +43,14 @@ module hist_eq_module #(
   input  logic                    s_axis_tlast,
   output logic                    s_axis_tready,
 
-  output logic [3*DATA_WIDTH-1:0] m_axis_tdata, // [23:16] - saturation channel, [15:8] - image mask, [7:0] - original image
+  output logic [2*DATA_WIDTH-1:0] m_axis_tdata, //[15:8] - image mask, [7:0] - original image
   output logic                    m_axis_tvalid,
   output logic                    m_axis_tuser,
   output logic                    m_axis_tlast
 
 );
 
-localparam PIPELINE_LENGTH    = 10;
+localparam PIPELINE_LENGTH    = 7;
 localparam MAXIMUM_BRIGHTNESS = 2**DATA_WIDTH - 1;
 //
 //
@@ -87,13 +87,6 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
       tlast  <= '{default:'0};
     end else begin
 
-    /*
-      if ( s_axis_tvalid ) begin	
-        tdata[0]  <= s_axis_tdata;
-      end  
-
-      tdata[1:PIPELINE_LENGTH-1]  <= {tdata[0],      tdata[1:PIPELINE_LENGTH-2]};
-    */
       tdata                       <= {s_axis_tdata,  tdata[0:PIPELINE_LENGTH-2]}; 
       tvalid                      <= {s_axis_tvalid, tvalid[0:PIPELINE_LENGTH-2]};
       tuser                       <= {s_axis_tuser,  tuser[0:PIPELINE_LENGTH-2]};
@@ -176,7 +169,8 @@ end
 
 logic [DATA_WIDTH-1:0] diff_max_I_min_I;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+//use reg with sync reset, cause it's the input of DSP
+always_ff @( posedge i_sys_clk )
   begin 
     if ( ~i_sys_aresetn ) begin
       diff_max_I_min_I <= '0;
@@ -190,6 +184,9 @@ end
 //STAGE_2
 //Evaluating expanding range, part_1
 //
+//NOTE: We use here comb logic for mult and after that register only [DATA_WIDTH+9:10] to divide by 1024;
+//      Also we use here regs with sync reset -> this helps us to optimize DSP inst.
+
 //Example:
 //upper_bound_param = 70% 
 //lower_bound_param = 20%
@@ -197,50 +194,62 @@ end
 //cut_from_upper_bound = diff_max_I_min_I * 0.7 = diff_max_I_min_I * 717 / 1024;
 //cut_from_lower_bound = diff_max_I_min_I * 0.2 = diff_max_I_min_I * 205 / 1024;
 //
-//We do these equations in two steps (multiplying and right shifting):
 //Multiplying:
 //1: cut_from_upper_bound_interm_step = diff_max_I_min_I * 717;
 //1: cut_from_lower_bound_interm_step = diff_max_I_min_I * 205;
 //
-//continue in STAGE_3
 
-logic [DATA_WIDTH+10:0] cut_from_upper_bound_interm_step;
-logic [DATA_WIDTH+10:0] cut_from_lower_bound_interm_step;
+logic [DATA_WIDTH+9:0] cut_from_upper_bound_interm_step_r, cut_from_upper_bound_interm_step;
+logic [DATA_WIDTH+9:0] cut_from_lower_bound_interm_step_r, cut_from_lower_bound_interm_step;
 
-
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
-  begin 
-    if ( ~i_sys_aresetn ) begin
-      cut_from_upper_bound_interm_step <= '{default:'0};
-      cut_from_lower_bound_interm_step <= '{default:'0};
-    end else begin
-      cut_from_upper_bound_interm_step <= diff_max_I_min_I * upper_bound_param;
-      cut_from_lower_bound_interm_step <= diff_max_I_min_I * lower_bound_param;
-    end
+always_comb begin
+  cut_from_upper_bound_interm_step = diff_max_I_min_I * upper_bound_param;
+  cut_from_lower_bound_interm_step = diff_max_I_min_I * lower_bound_param;
 end
-//
-//
 
-//STAGE_3
 //continuation of STAGE_2: shifting (div 1024)
-//2: cut_from_upper_bound <= cut_from_upper_bound_interm_step >> 10;
-//2: cut_from_lower_bound <= cut_from_upper_bound_interm_step >> 10;
+//2: cut_from_upper_bound <= cut_from_upper_bound_interm_step >> 10 or just take [DATA_WIDTH+9:10];
+//2: cut_from_lower_bound <= cut_from_upper_bound_interm_step >> 10 or just take [DATA_WIDTH+9:10];
 
-logic [DATA_WIDTH-1:0] cut_from_upper_bound;
-logic [DATA_WIDTH-1:0] cut_from_lower_bound;
+logic [DATA_WIDTH+9:0] cut_from_upper_bound;
+logic [DATA_WIDTH+9:0] cut_from_lower_bound;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+//make it with sync reset to use DSP;
+always_ff @( posedge i_sys_clk )
   begin 
     if ( ~i_sys_aresetn ) begin
       cut_from_upper_bound <= '{default:'0};
       cut_from_lower_bound <= '{default:'0};
     end else begin
-      cut_from_upper_bound <= cut_from_upper_bound_interm_step >> 10;
-      cut_from_lower_bound <= cut_from_lower_bound_interm_step >> 10;
+
+      cut_from_upper_bound <= cut_from_upper_bound_interm_step;//cut_from_upper_bound_interm_step[DATA_WIDTH+9:10];
+      cut_from_lower_bound <= cut_from_lower_bound_interm_step;//cut_from_lower_bound_interm_step[DATA_WIDTH+9:10];
     end
 end
+
 //
 //
+
+//STAGE_3
+//DSP needs an extra pipeline register on it's output
+logic [DATA_WIDTH-1:0] cut_from_upper_bound_reg;
+logic [DATA_WIDTH-1:0] cut_from_lower_bound_reg;
+
+//make it with sync reset to use DSP;
+always_ff @( posedge i_sys_clk )
+  begin 
+    if ( ~i_sys_aresetn ) begin
+      cut_from_upper_bound_reg <= '{default:'0};
+      cut_from_lower_bound_reg <= '{default:'0};
+    end else begin
+
+      cut_from_upper_bound_reg <= cut_from_upper_bound[DATA_WIDTH+9:10];
+      cut_from_lower_bound_reg <= cut_from_lower_bound[DATA_WIDTH+9:10];
+    end
+end
+
+
+
 
 //STAGE_4
 //Evaluating expanding range, part_2
@@ -276,12 +285,12 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
       cut_max_I <= '{default:'0};
       cut_min_I <= '{default:'0};
     end else begin
-      if ( ( max_I - min_I ) > cut_from_upper_bound) begin
-        cut_max_I <= min_I + cut_from_upper_bound;
+      if ( ( max_I - min_I ) > cut_from_upper_bound_reg) begin
+        cut_max_I <= min_I + cut_from_upper_bound_reg;
       end else begin
       	cut_max_I <= max_I;
       end 
-      cut_min_I <= min_I + cut_from_lower_bound;
+      cut_min_I <= min_I + cut_from_lower_bound_reg;
     end
 end
 //
@@ -302,12 +311,14 @@ end
 //
 //
 
-//STAGE_6
+//STAGE_6.1
 //(255)/(cut_max_I - cut_min_I) = mult;
 //We decided not to use devision, so we estimated mult according to cut_diff_max_I_min_I
 logic [4:0] mult;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+
+//use reg with sync reset, cause it's the input of multiplier
+always_ff @( posedge i_sys_clk )
   begin 
     if ( ~i_sys_aresetn ) begin
       mult <= '{default:'0};
@@ -357,38 +368,40 @@ end
 //
 //
 
-//STAGE_7
+//STAGE_6.2
 //data_minus_min_I = (I - min_I)
-//calculation during this stage is done simultainiously with stage_6,..
+//calculation during this stage is done simultainiously with stage_5,..
 //..so mult and data_minus_min_I appear together
 
 logic [DATA_WIDTH-1:0] data_minus_min_I;
 logic test1;
 logic test2;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+//use reg with sync reset, cause it's the input of multiplier
+always_ff @( posedge i_sys_clk )
   begin 
     if ( ~i_sys_aresetn ) begin
       data_minus_min_I <= '{default:'0};
     end else begin
-     // if ( tdata[4] <  cut_min_I ) begin
-     //   data_minus_min_I <= '{default:'0};
-     // end else begin	
-     //   data_minus_min_I <= tdata[3] - cut_min_I;
-     // end
-     data_minus_min_I <= tdata[6];
+      if ( tdata[3] <  cut_min_I ) begin
+        data_minus_min_I <= '{default:'0};
+      end else begin	
+        data_minus_min_I <= tdata[3] - cut_min_I;
+     end
+
     end
 end
 //
 //
 
-//STAGE_8
+//STAGE_7
 // f(I) = data_minus_min_I * mult;
 logic [DATA_WIDTH+4:0] f_I;
 logic test3;
 logic test4;
 
-always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+//use reg with sync reset, cause it's the output of multiplier
+always_ff @( posedge i_sys_clk )
   begin 
     if ( ~i_sys_aresetn ) begin
       f_I <= '{default:'0};
@@ -397,7 +410,7 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
     end
 end
 
-//STAGE_9
+//STAGE_8
 //Thresholding -> IMAGE MASK CREATION
 logic [DATA_WIDTH-1:0] data_after_threshold;
 logic test5;
@@ -432,7 +445,7 @@ end
 
 //OUTPUT 
 // [23:16] - saturation channel, [15:8] - image mask, [7:0] - original image
-// if thresholding_en == 0, [15:8] - contrasted image
+// if thresholding_en == 0,      [15:8] - contrasted image
 
 always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
   begin 
@@ -443,17 +456,10 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
       m_axis_tlast  <= 1'b0;
     end else begin
 
-      //3rd channel in m_axis_tdata shows saturated pixels	
-      if ( tdata[PIPELINE_LENGTH-1] == '1 ) begin
-        m_axis_tdata[3*DATA_WIDTH-1:2*DATA_WIDTH] <= '{default:'1};
-      end else begin
-        m_axis_tdata[3*DATA_WIDTH-1:2*DATA_WIDTH] <= '{default:'0};
-      end
-
-        m_axis_tdata[2*DATA_WIDTH-1:0] <= {data_after_threshold, tdata[PIPELINE_LENGTH-1]};
-        m_axis_tvalid                  <= tvalid[PIPELINE_LENGTH-1];
-        m_axis_tuser                   <= tuser[PIPELINE_LENGTH-1];
-        m_axis_tlast                   <= tlast[PIPELINE_LENGTH-1];
+      m_axis_tdata[2*DATA_WIDTH-1:0] <= {data_after_threshold, tdata[PIPELINE_LENGTH-1]};
+      m_axis_tvalid                  <= tvalid[PIPELINE_LENGTH-1];
+      m_axis_tuser                   <= tuser[PIPELINE_LENGTH-1];
+      m_axis_tlast                   <= tlast[PIPELINE_LENGTH-1];
 
     end
 end

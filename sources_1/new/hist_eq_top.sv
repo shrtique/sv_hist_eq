@@ -40,7 +40,7 @@
     input  logic                      s_axis_tlast,
     output logic                      s_axis_tready,
         
-    output logic [3*DATA_WIDTH-1:0]   m_axis_tdata,
+    output logic [2*DATA_WIDTH-1:0]   m_axis_tdata,
     output logic                      m_axis_tvalid,
     output logic                      m_axis_tuser,
     output logic                      m_axis_tlast,
@@ -123,7 +123,7 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
     //
 
     // synch stage   
-    always_ff @( posedge i_sys_clk, negedge i_sys_aresetn ) begin 
+    always_ff @( posedge i_sys_clk ) begin 
       if ( ~i_sys_aresetn ) begin
         set_new_param <= '0;
       end else begin
@@ -133,7 +133,8 @@ logic [C_S00_AXI_DATA_WIDTH-1:0] slv_reg0;
     ////
 
 	//registering new parameters only when s_axis_tuser is active
-	always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
+    //use reg with sync reset, cause some parameters are used as inputs for DSP
+	always_ff @( posedge i_sys_clk )
     begin 
       if ( ~i_sys_aresetn ) begin
         contrast_threshold <= '0;

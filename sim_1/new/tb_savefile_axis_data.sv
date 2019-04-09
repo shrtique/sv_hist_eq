@@ -163,7 +163,7 @@ always_ff @( posedge i_sys_clk, negedge i_sys_aresetn )
 
       $fclose(fileID); 
       
-      //$finish;
+      $finish;
     
 
     end   

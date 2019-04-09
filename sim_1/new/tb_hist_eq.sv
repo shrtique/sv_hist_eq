@@ -110,7 +110,7 @@ initial
 
 always @(posedge clk) begin
   if (~aresetn) begin
-    s_axis_tdata_r  <= '0;
+    s_axis_tdata_r  <= 'd49;
     s_axis_tvalid_r <= '0;
     s_axis_tuser_r  <= '0;
     s_axis_tlast_r  <= '0;
